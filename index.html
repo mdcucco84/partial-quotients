@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PASCS Clifton Elementary's Food Store - Classroom Cash Register</title>
+<style>
+  :root{--bg:#fff7e6;--card:#ffffff;--accent:#f6b800}
+  body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:#222;background:linear-gradient(135deg,#fffaf0,#fff3cc);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+  .app{width:100%;max-width:1000px;background:var(--card);border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.08);padding:20px}
+  h1{text-align:center;margin:4px 0 12px;font-size:26px}
+  .grid{display:grid;grid-template-columns:1fr 360px;gap:18px}
+  .items{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .item-btn{background:#fff;border:2px solid #f0e1b8;padding:12px;border-radius:10px;font-weight:600;cursor:pointer}
+  .edit-row{display:flex;gap:8px;margin-top:6px}
+  input[type="text"], input[type="number"]{padding:8px;border-radius:8px;border:1px solid #ddd;width:100%}
+  .right{background:linear-gradient(180deg,#fff,#fffbee);padding:14px;border-radius:12px}
+  .total{font-size:22px;font-weight:700;text-align:center;margin-bottom:8px}
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:260px;margin:0 auto}
+  .key{padding:12px;border-radius:8px;background:#fff;border:1px solid #eee;font-size:18px;cursor:pointer}
+  .controls{display:flex;gap:8px;justify-content:center;margin-top:10px}
+  .receipt{background:#fff;padding:10px;border-radius:10px;margin-top:12px;max-height:260px;overflow:auto;border:1px dashed #eee}
+  .receipt ul{list-style:none;padding:0;margin:6px 0}
+  .receipt li{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #fafafa}
+  .mutebutton{position:absolute;right:24px;top:18px;background:#fff;padding:8px;border-radius:8px;border:1px solid #eee;cursor:pointer}
+  .fullscreen-note{font-size:12px;color:#666;text-align:center;margin-top:6px}
+  footer{font-size:12px;color:#666;text-align:center;margin-top:10px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr;}.right{order:2}.items{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="mutebutton" id="muteBtn">🔊</div>
+<div class="app" role="application" aria-label="Classroom Cash Register">
+  <h1>PASCS Clifton Elementary's Food Store</h1>
+  <div class="grid">
+    <div>
+      <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:8px">
+        <strong style="font-size:18px">Items (tap to add)</strong>
+        <button id="enterFs" class="key" style="padding:8px 12px;border-radius:8px">Enter Fullscreen</button>
+      </div>
+      <div class="items" id="itemsArea"></div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <input id="newName" type="text" placeholder="New item name" />
+        <input id="newPrice" type="number" step="0.01" placeholder="Price" style="width:100px" />
+        <button id="addNew" class="key" style="width:120px">Add Item</button>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="total">Total: $<span id="total">0.00</span></div>
+
+      <div class="keypad" id="keypad">
+        <!-- keypad buttons inserted by JS -->
+      </div>
+
+      <input id="paid" type="text" placeholder="Enter amount paid" style="margin-top:10px;padding:10px;border-radius:8px;border:1px solid #ddd;width:100%" />
+
+      <div class="controls">
+        <button id="clearBtn" class="key">Clear</button>
+        <button id="checkoutBtn" class="key">Checkout</button>
+        <button id="printBtn" class="key">🖨️ Print Receipt</button>
+      </div>
+
+      <div id="changeArea" style="text-align:center;margin-top:10px;font-weight:700"></div>
+
+      <div class="receipt" id="receipt">
+        <h3 style="margin:0 0 6px 0;text-align:center">🧾 Receipt</h3>
+        <ul id="cartList"></ul>
+        <div style="display:flex;justify-content:space-between;font-weight:700;padding-top:6px;border-top:1px solid #f4f4f4">
+          <span>Total:</span><span id="receiptTotal">$0.00</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px" id="receiptChangeRow"></div>
+      </div>
+
+      <div class="fullscreen-note">Tip: Click "Enter Fullscreen" for an immersive Smartboard view. Browsers may block automatic fullscreen.</div>
+    </div>
+  </div>
+
+  <footer>Designed for Smartboard touch interaction • Editable items • Number keypad</footer>
+</div>
+
+<script>
+(function(){
+  // Data model
+  const defaultItems = [
+    {name:'Apple', price:1.00},
+    {name:'Grapes', price:2.00},
+    {name:'Lime', price:3.00},
+    {name:'Orange', price:4.00},
+    {name:'Carrot', price:5.00},
+	  {name:'Broccoli', price:6.00},
+	  {name:'Corn', price:7.00},
+	  {name:'Pineapple', price:8.00},
+	  {name:'Watermelon', price:9.00},
+	  {name:'Fish', price:10.00},
+	  {name:'Crab', price:11.00},
+	  {name:'Lobster', price:12.00}
+  ];
+
+  const storageKey = 'pascs_cash_register_items_v1';
+  const items = JSON.parse(localStorage.getItem(storageKey) || 'null') || defaultItems;
+  const cart = [];
+  let total = 0;
+  let muted = false;
+
+  // Elements
+  const itemsArea = document.getElementById('itemsArea');
+  const totalEl = document.getElementById('total');
+  const keypadEl = document.getElementById('keypad');
+  const paidEl = document.getElementById('paid');
+  const cartList = document.getElementById('cartList');
+  const receiptTotal = document.getElementById('receiptTotal');
+  const receiptChangeRow = document.getElementById('receiptChangeRow');
+  const changeArea = document.getElementById('changeArea');
+  const muteBtn = document.getElementById('muteBtn');
+
+  // Sound: WebAudio tones
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = AudioCtx ? new AudioCtx() : null;
+  function playTone(freq, length=0.12){
+    if(muted || !ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    o.connect(g);
+    g.connect(ctx.destination);
+    g.gain.value = 0.08;
+    o.start();
+    o.stop(ctx.currentTime + length);
+  }
+  function playDing(){ playTone(880, 0.08); }
+  function playChaching(){ playTone(660, 0.15); setTimeout(()=>playTone(880,0.08),90); }
+
+  // Mute toggle
+  function updateMuteUI(){ muteBtn.textContent = muted ? '🔇 Muted' : '🔊'; }
+  muteBtn.addEventListener('click', ()=>{ muted = !muted; updateMuteUI(); });
+  updateMuteUI();
+
+  // Render items
+  function saveItems(){ localStorage.setItem(storageKey, JSON.stringify(items)); }
+  function renderItems(){
+    itemsArea.innerHTML = '';
+    items.forEach((it, idx) => {
+      const wrap = document.createElement('div');
+      wrap.style.display = 'flex';
+      wrap.style.flexDirection = 'column';
+      const btn = document.createElement('button');
+      btn.className = 'item-btn';
+      btn.textContent = `${it.name} - $${it.price.toFixed(2)}`;
+      btn.addEventListener('click', ()=>{ addItemToCart(idx); });
+      wrap.appendChild(btn);
+
+      const editRow = document.createElement('div');
+      editRow.className = 'edit-row';
+      const nameIn = document.createElement('input');
+      nameIn.type = 'text'; nameIn.value = it.name;
+      nameIn.addEventListener('change', (e)=>{ items[idx].name = e.target.value; saveItems(); renderItems(); });
+
+      const priceIn = document.createElement('input');
+      priceIn.type='number'; priceIn.step='0.01'; priceIn.value = it.price;
+      priceIn.style.width='90px';
+      priceIn.addEventListener('change', (e)=>{ items[idx].price = parseFloat(e.target.value)||0; saveItems(); renderItems(); });
+
+      editRow.appendChild(nameIn); editRow.appendChild(priceIn);
+      wrap.appendChild(editRow);
+      itemsArea.appendChild(wrap);
+    });
+  }
+
+  // Add new item
+  document.getElementById('addNew').addEventListener('click', ()=>{
+    const n = document.getElementById('newName').value.trim();
+    const p = parseFloat(document.getElementById('newPrice').value);
+    if(n && !isNaN(p)){ items.push({name:n,price:parseFloat(p.toFixed(2))}); saveItems(); renderItems(); document.getElementById('newName').value=''; document.getElementById('newPrice').value=''; }
+  });
+
+  function addItemToCart(idx){
+    const it = items[idx];
+    cart.push(it);
+    total = Math.round((total + it.price)*100)/100;
+    updateReceipt();
+    playDing();
+  }
+
+  function updateReceipt(){
+    cartList.innerHTML = '';
+    cart.forEach((it, i)=>{
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${it.name}</span><span>$${it.price.toFixed(2)}</span>`;
+      cartList.appendChild(li);
+    });
+    totalEl.textContent = total.toFixed(2);
+    receiptTotal.textContent = '$' + total.toFixed(2);
+    // clear change display
+    changeArea.textContent = '';
+    receiptChangeRow.innerHTML = '';
+  }
+
+  // Keypad
+  const keys = ['7','8','9','4','5','6','1','2','3','0','.','←'];
+  keys.forEach(k=>{
+    const b = document.createElement('button'); b.className='key'; b.textContent=k;
+    b.addEventListener('click', ()=>{ handleKey(k); });
+    keypadEl.appendChild(b);
+  });
+  const clearBtn = document.getElementById('clearBtn');
+  clearBtn.addEventListener('click', ()=>{ cart.length=0; total=0; paidEl.value=''; updateReceipt(); });
+
+  function handleKey(k){
+    if(k==='←'){ paidEl.value = paidEl.value.slice(0,-1); }
+    else { paidEl.value = paidEl.value + k; }
+  }
+
+  // Checkout
+  document.getElementById('checkoutBtn').addEventListener('click', ()=> {
+    const paid = parseFloat(paidEl.value);
+    if(isNaN(paid)){ changeArea.textContent = 'Enter a valid payment'; return; }
+    if(paid < total){ changeArea.textContent = 'Not enough payment'; return; }
+    const change = Math.round((paid - total)*100)/100;
+    changeArea.textContent = 'Change: $' + change.toFixed(2);
+    receiptChangeRow.innerHTML = `<span>Paid:</span><span>$${paid.toFixed(2)}</span><div style="width:100%"></div>`;
+    receiptChangeRow.innerHTML += `<div style="display:flex;justify-content:space-between;margin-top:6px"><span>Change:</span><span>$${change.toFixed(2)}</span></div>`;
+    playChaching();
+  });
+
+  // Print Receipt
+  document.getElementById('printBtn').addEventListener('click', ()=> {
+    const content = document.getElementById('receipt').innerHTML;
+    const header = `<h2 style="text-align:center">PASCS Clifton Elementary's Food Store</h2>`;
+    const win = window.open('','_blank','width=400,height=600');
+    win.document.write('<html><head><title>Receipt</title></head><body>');
+    win.document.write(header + content);
+    win.document.write('</body></html>');
+    win.document.close();
+    win.focus();
+    setTimeout(()=>win.print(),300);
+  });
+
+  // Enter Fullscreen button
+  document.getElementById('enterFs').addEventListener('click', ()=> {
+    const el = document.documentElement;
+    if(el.requestFullscreen) el.requestFullscreen();
+    else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else alert('Fullscreen not supported by this browser.');
+  });
+
+  // Attempt to request fullscreen on first user interaction (best-effort)
+  function tryAutoFullscreen(){
+    function once(){ 
+      document.removeEventListener('click', once);
+      // browsers typically block automatic fullscreen; we attempt on first user gesture
+      const el = document.documentElement;
+      if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+    }
+    document.addEventListener('click', once);
+  }
+  tryAutoFullscreen();
+
+  // Render initial UI
+  renderItems();
+
+  // Expose for debugging (optional)
+  window.__pascs = { items, cart };
+
+})();
+</script>
+</body>
+</html>
